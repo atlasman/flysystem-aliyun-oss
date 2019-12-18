@@ -1,0 +1,32 @@
+{
+    "name": "atlasman/flysystem-aliyun-oss",
+    "description": "Flysystem adapter for Aliyun OSS",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "atlasman",
+            "email": "iatlasman@gmail.com",
+            "homepage": "https://github.com/atlasman"
+        }
+    ],
+    "homepage": "https://github.com/atlasman/flysystem-aliyun-oss.git",
+    "keywords": ["Flysystem", "Aliyun", "OSS"],
+    "require": {
+        "php": "^7.0",
+        "league/flysystem": "^1.0.57",
+        "aliyuncs/oss-sdk-php": "^2.3"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "~7.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Atlasman\\Flysystem\\AliyunOss\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Atlasman\\Flysystem\\AliyunOss\\Tests\\": "tests"
+        }
+    }
+}
