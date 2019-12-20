@@ -43,6 +43,12 @@ class AliyunOssAdapter extends AbstractAdapter
     protected $expires = 3600;
 
     /**
+     * [$viewDomain description]
+     * @var null
+     */
+    protected $viewDomain = null;
+
+    /**
      * Constructor
      * @param OssClient $client  [description]
      * @param string    $bucket  [description]
@@ -322,7 +328,7 @@ class AliyunOssAdapter extends AbstractAdapter
     {
         try {
             $object = $this->applyPathPrefix($path);
-            $result = $this->oss->putObject($this->bucket, $object, $contents, $this->getOptionsFromConfig($config));
+            $result = $this->client->putObject($this->bucket, $object, $contents, $this->getOptionsFromConfig($config));
             return $result;
         } catch (OssException $e) {
             throw new Exception($e->getErrorMessage());
