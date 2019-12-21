@@ -9,6 +9,7 @@ namespace Atlasman\Flysystem\AliyunOss;
 use League\Flysystem\Adapter\AbstractAdapter;
 use League\Flysystem\AdapterInterface;
 use League\Flysystem\Adapter\Polyfill\NotSupportingVisibilityTrait;
+use League\Flysystem\Adapter\Polyfill\StreamedTrait;
 use League\Flysystem\Config;
 use League\Flysystem\Util\MimeType;
 use League\Flysystem\Exception;
@@ -19,6 +20,11 @@ use DateTimeInterface;
 
 class AliyunOssAdapter extends AbstractAdapter
 {
+    use StreamedTrait,
+        NotSupportingVisibilityTrait;
+
+    const VERSION = '1.0.2';
+
     const OSS_ACL_TYPE_DEFAULT = 'default';
 
     /**
@@ -34,7 +40,10 @@ class AliyunOssAdapter extends AbstractAdapter
      /**
      * @var array
      */
-    protected static $metaOptions = [];
+    protected static $metaOptions = [
+        'mimetype' => OssClient::OSS_CONTENT_TYPE,
+        'size'     => OssClient::OSS_LENGTH,
+    ];
 
     /**
      * 授权时间，单位：s 秒
@@ -101,21 +110,6 @@ class AliyunOssAdapter extends AbstractAdapter
         } catch (OssException $e) {
             throw new Exception($e->getErrorMessage());
         }
-    }
-
-    /**
-     * Read a file as a stream.
-     *
-     * @param string $path
-     *
-     * @return array|false
-     */
-    public function readStream($path)
-    {
-        $object = $this->applyPathPrefix($path);
-        $url = $this->client->signUrl($this->bucket, $object, 3600);
-        $stream = fopen($url, 'r');
-        return compact('stream');
     }
 
     /**
@@ -283,39 +277,6 @@ class AliyunOssAdapter extends AbstractAdapter
     }
 
     /**
-     * Write a new file using a stream.
-     *
-     * @param string   $path
-     * @param resource $resource
-     * @param Config   $config   Config object
-     *
-     * @return array|false false on failure file meta data on success
-     */
-    public function writeStream($path, $resource, Config $config)
-    {
-        if ( ! is_resource($resource)) {
-            throw new Exception(__METHOD__ . ' expects argument #2 to be a valid resource.');
-        }
-        try {
-            $object = $this->applyPathPrefix($path);
-            $i          = 0;
-            $bufferSize = 1000000; // 1M
-            while (!feof($resource)) {
-                if (false === $buffer = fread($resource, $block = $bufferSize)) {
-                    return false;
-                }
-                $position = $i * $bufferSize;
-                $size     = $this->client->appendObject($this->bucket, $object, $buffer, $position, $this->getOptionsFromConfig($config));
-                $i++;
-            }
-            fclose($resource);
-            return true;
-        } catch (OssException $e) {
-            throw new Exception($e->getErrorMessage());
-        }
-    }
-
-    /**
      * Update a file.
      *
      * @param string $path
@@ -333,24 +294,6 @@ class AliyunOssAdapter extends AbstractAdapter
         } catch (OssException $e) {
             throw new Exception($e->getErrorMessage());
         }
-    }
-
-    /**
-     * Update a file using a stream.
-     *
-     * @param string   $path
-     * @param resource $resource
-     * @param Config   $config   Config object
-     *
-     * @return array|false false on failure file meta data on success
-     */
-    public function updateStream($path, $resource, Config $config)
-    {
-        $result = $this->write($path, stream_get_contents($resource), $config);
-        if (is_resource($resource)) {
-            fclose($resource);
-        }
-        return $result;
     }
 
     /**
@@ -420,7 +363,21 @@ class AliyunOssAdapter extends AbstractAdapter
      */
     public function deleteDir($dirname)
     {
-        return $this->delete($dirname);
+        try {
+            $list = $this->listContents($dirname, true);
+            $objects = [];
+            foreach ($list as $val) {
+                if ($val['type'] === 'file') {
+                    $objects[] = $this->applyPathPrefix($val['path']);
+                } else {
+                    $objects[] = $this->applyPathPrefix($val['path']) .'/';
+                }
+            }
+            $this->client->deleteObjects($this->bucket, $objects);
+            return true;
+        } catch (OssException $e) {
+            throw new Exception($e->getErrorMessage());
+        }
     }
 
     /**
@@ -433,7 +390,14 @@ class AliyunOssAdapter extends AbstractAdapter
      */
     public function createDir($dirname, Config $config)
     {
-        throw new NotSupportedException('This driver does not support create directory');
+        try {
+            $object = $this->applyPathPrefix($dirname);
+            $options = $this->getOptionsFromConfig($config);
+            $this->client->createObjectDir($this->bucket, $object, $options);
+            return ['path' => $dirname, 'type' => 'dir'];
+        } catch (OssException $e) {
+            throw new Exception($e->getErrorMessage());
+        }
     }
 
     /**
