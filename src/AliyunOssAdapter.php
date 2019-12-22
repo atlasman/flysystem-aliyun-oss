@@ -23,7 +23,7 @@ class AliyunOssAdapter extends AbstractAdapter
     use StreamedTrait,
         NotSupportingVisibilityTrait;
 
-    const VERSION = '1.0.2';
+    const VERSION = '1.0.3';
 
     const OSS_ACL_TYPE_DEFAULT = 'default';
 
@@ -36,6 +36,11 @@ class AliyunOssAdapter extends AbstractAdapter
      * @var string
      */
     protected $bucket;
+
+    /**
+     * @var array
+     */
+    protected $options = [];
 
      /**
      * @var array
@@ -52,10 +57,10 @@ class AliyunOssAdapter extends AbstractAdapter
     protected $expires = 3600;
 
     /**
-     * [$viewDomain description]
-     * @var null
+     * 默认acl
+     * @var
      */
-    protected $viewDomain = null;
+    protected $acl;
 
     /**
      * Constructor
@@ -70,11 +75,15 @@ class AliyunOssAdapter extends AbstractAdapter
         $this->bucket = $bucket;
         $this->setPathPrefix($prefix);
 
-        foreach ($options as $key => $val) {
-            if (in_array($key, ['expires'])) {
-                $this->$key = $val;
-            }
+        if (isset($options['expires'])) {
+            $this->expires = $options['expires'];
+            unset($options['expires']);
         }
+        if (isset($options['acl'])) {
+            $this->acl = $options['acl'];
+            unset($options['acl']);
+        }
+        $this->options = $options;
     }
 
     /**
@@ -269,7 +278,11 @@ class AliyunOssAdapter extends AbstractAdapter
     {
         try {
             $object = $this->applyPathPrefix($path);
-            $result = $this->client->putObject($this->bucket, $object, $contents, $this->getOptionsFromConfig($config));
+            $options = $this->getOptionsFromConfig($config);
+            if ($this->acl && (empty($options['headers']) || empty($options['headers'][OssClient::OSS_OBJECT_ACL]) )) {
+                $options['headers'][OssClient::OSS_OBJECT_ACL] = $this->acl;
+            }
+            $result = $this->client->putObject($this->bucket, $object, $contents, $options);
             return $result;
         } catch (OssException $e) {
             throw new Exception($e->getErrorMessage());
@@ -313,7 +326,7 @@ class AliyunOssAdapter extends AbstractAdapter
             $this->client->deleteObject($this->bucket, $path);
             return true;
         } catch (OssException $e) {
-            return false;
+            throw new Exception($e->getErrorMessage());
         }
     }
 
@@ -426,7 +439,8 @@ class AliyunOssAdapter extends AbstractAdapter
      */
     public function getUrl($path)
     {
-        return $this->publicUrl($path);
+        $objectMeta = $this->getMetadata($path);
+        return $objectMeta['info']['url'];
     }
 
     /**
@@ -461,31 +475,6 @@ class AliyunOssAdapter extends AbstractAdapter
     }
 
     /**
-     * [publicUrl description]
-     * @param  string $path    [description]
-     * @param  array  $options [description]
-     * @return [type]          [description]
-     */
-    public function publicUrl(string $path, array $options = [])
-    {
-        try {
-            $url = $this->getTemporaryUrl($path, null, $options);
-            $parse = parse_url($url);
-            $query = explode('&', $parse['query']);
-            $query = array_filter($query, function($item){
-                list($key, $val) = explode('=', $item);
-                if (!in_array($key, ['OSSAccessKeyId', 'Expires', 'Signature'])) {
-                    return $item;
-                }
-            });
-            $baseUrl = $parse['scheme'].'://'.$parse['host'].$parse['path'];
-            return empty($query)? $baseUrl : $baseUrl.'?'.implode('&', $query);
-        } catch (Exception $e) {
-            throw $e;
-        }
-    }
-
-    /**
      * Get options from the config.
      *
      * @param Config $config
@@ -508,7 +497,7 @@ class AliyunOssAdapter extends AbstractAdapter
         }
 
         if ($visibility = strtolower($config->get('visibility'))) {
-            $options['headers']['x-oss-object-acl'] = $visibility == AdapterInterface::VISIBILITY_PUBLIC ? 'public-read' : 'private';
+            $options['headers'][OssClient::OSS_OBJECT_ACL] = $visibility == AdapterInterface::VISIBILITY_PUBLIC ? 'public-read' : 'private';
         }
 
         foreach (static::$metaOptions as $option) {
