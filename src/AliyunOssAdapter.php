@@ -51,12 +51,6 @@ class AliyunOssAdapter extends AbstractAdapter
     ];
 
     /**
-     * 授权时间，单位：s 秒
-     * @var integer
-     */
-    protected $expires = 3600;
-
-    /**
      * 默认acl
      * @var
      */
@@ -75,10 +69,6 @@ class AliyunOssAdapter extends AbstractAdapter
         $this->bucket = $bucket;
         $this->setPathPrefix($prefix);
 
-        if (isset($options['expires'])) {
-            $this->expires = $options['expires'];
-            unset($options['expires']);
-        }
         if (isset($options['acl'])) {
             $this->acl = $options['acl'];
             unset($options['acl']);
@@ -447,21 +437,17 @@ class AliyunOssAdapter extends AbstractAdapter
      * Get a temporary URL for the file at the given path.
      *
      * @param  string  $path
-     * @param  DateTimeInterface\null  $expiration
+     * @param  \DateTimeInterface  $expiration
      * @param  array  $options
      * @return string
      *
      * @throws \RuntimeException
      */
-    public function getTemporaryUrl(string $path, DateTimeInterface $expiration = null, array $options = []): string
+    public function getTemporaryUrl(string $path, DateTimeInterface $expiration, array $options = []): string
     {
         try {
             $object = $this->applyPathPrefix($path);
-            if (!empty($expiration)) {
-                $expires = $expiration->getTimestamp() - time();
-            } else {
-                $expires = $this->expires;
-            }
+            $expires = $expiration->getTimestamp() - time();
             return $this->client->signUrl(
                 $this->bucket,
                 $object,
