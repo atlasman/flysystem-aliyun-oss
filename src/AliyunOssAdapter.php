@@ -38,6 +38,12 @@ class AliyunOssAdapter extends AbstractAdapter
     protected $bucket;
 
     /**
+     * 传输域名
+     * @var string
+     */
+    protected $domain;
+
+    /**
      * @var array
      */
     protected $options = [];
@@ -73,6 +79,12 @@ class AliyunOssAdapter extends AbstractAdapter
             $this->acl = $options['acl'];
             unset($options['acl']);
         }
+
+        if (isset($options['domain'])) {
+            $this->domain = rtrim($options['domain'], '/').'/';
+            unset($options['domain']);
+        }
+
         $this->options = $options;
     }
 
@@ -429,8 +441,13 @@ class AliyunOssAdapter extends AbstractAdapter
      */
     public function getUrl($path)
     {
-        $objectMeta = $this->getMetadata($path);
-        return $objectMeta['info']['url'];
+        if ($this->domain) {
+            $url = $this->domain.$this->applyPathPrefix($path);
+        } else {
+            $objectMeta = $this->getMetadata($path);
+            $url = $objectMeta['info']['url'];
+        }
+        return $url;
     }
 
     /**
@@ -448,13 +465,15 @@ class AliyunOssAdapter extends AbstractAdapter
         try {
             $object = $this->applyPathPrefix($path);
             $expires = $expiration->getTimestamp() - time();
-            return $this->client->signUrl(
+            $url = $this->client->signUrl(
                 $this->bucket,
                 $object,
                 $expires,
                 OssClient::OSS_HTTP_GET,
                 $options
             );
+
+            return $url;
         } catch (OssException $e) {
             throw new Exception($e->getErrorMessage());
         }
